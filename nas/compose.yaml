@@ -1,0 +1,14 @@
+services:
+  canon-collector:
+    # Set CANON_PYTHON_IMAGE to the tested Python image tag/digest and NAS architecture.
+    image: ${CANON_PYTHON_IMAGE:?Set tested Python image}
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # Optionally set user: "UID:GID" after preparing report-folder ACL.
+    volumes:
+      - ${CANON_APP_DIR:?Set absolute NAS apps path}:/app:ro
+      - ${CANON_REPORT_DIR:?Set absolute NAS reports path}:/reports:rw
+    command: [python3, -B, -u, /app/canon_collector.py, --subnet, "${CANON_SUBNET:?Set approved LAN CIDR}", --output, /reports, --workers, "4", --timeout, "3", --retries, "1"]

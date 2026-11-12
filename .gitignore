@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.env
+*smtp-password*
+raporty_Canon/
+canon-collector-data/
+nas/reports/*
+!nas/reports/.gitkeep
