@@ -1,71 +1,71 @@
-# Canon Plotery
+# Canon Plotters
 
-Narzędzia do zdalnego odczytu liczników z ploterów Canon w sieci lokalnej. Zamiast chodzić do każdego urządzenia i spisywać liczniki z panelu, uruchamiasz skrypt, a on sam pyta plotery o model, numer seryjny, zużycie papieru i atramentu, a potem zapisuje wszystko w raporcie.
+Tools for reading counters from Canon large-format plotters over the local network. Instead of walking up to each machine and writing down the counters from the panel, you run a script. It asks the plotters for their model, serial number, paper and ink usage, and saves everything in a report.
 
-Skrypty **tylko czytają**: nie wysyłają wydruków i nie zmieniają ustawień ploterów.
+The scripts **only read**. They never send print jobs and never change plotter settings.
 
-## Którą wersję wybrać?
+## Which version should I use?
 
-Są dwie wersje, każda do czego innego:
+There are two versions, each for a different job:
 
-| Wersja | Kiedy jej użyć | Jak uruchomić | Co dostajesz |
+| Version | When to use it | How to run it | What you get |
 | --- | --- | --- | --- |
-| [Komputer](desktop/README.md) | Chcesz szybko sprawdzić jeden lub kilka ploterów ze swojego komputera z Windows (na Linuksie też działa, ale trzeba podać adres IP lub podsieć) | `Canon_plotery.cmd` albo bezpośrednio Python | Raport TXT i HTML, log, a przy CPCA także surowy plik BIN |
-| [NAS](nas/README.md) | Chcesz, żeby NAS sam przeskanował całą sieć i zrobił jeden zbiorczy raport | Kontener z Pythonem albo z linii poleceń | Manifest JSON, raport TXT, surowe odpowiedzi XML/BIN i logi |
+| [Desktop](desktop/README.md) | You want to quickly check one or a few plotters from your Windows PC (Linux works too, but you have to give an IP address or subnet) | `Canon_plotery.cmd` or Python directly | TXT and HTML report, log, plus a raw BIN file for CPCA |
+| [NAS](nas/README.md) | You want the NAS to scan the whole network on its own and produce one combined report | Python container or command line | JSON manifest, TXT report, raw XML/BIN responses and logs |
 
-Potrzebny jest tylko Python 3.10 lub nowszy. Nie trzeba niczego doinstalowywać przez pip.
+All you need is Python 3.10 or newer. Nothing has to be installed with pip.
 
-Co jeszcze jest w repozytorium:
+Also in the repository:
 
-- `Canon_CHMP.py` w katalogu głównym to starszy, samodzielny czytnik CHMP. Zostawiłem go dla porządku.
-- `desktop/Canon_plotery.cmd` to nowy uruchamiacz dla Windows, napisany od zera. To nie jest odzyskana kopia dawnego `Canon_CHMP.cmd`.
-- `apk/` zawiera dotychczasowe wersje aplikacji Android „Canon Liczniki” (1.1–1.4), bez zmian.
+- `Canon_CHMP.py` in the root folder is the older, standalone CHMP reader. It's kept for reference.
+- `desktop/Canon_plotery.cmd` is a new Windows launcher written from scratch. It is not a recovered copy of the old `Canon_CHMP.cmd`.
+- `apk/` holds the existing releases of the "Canon Liczniki" Android app (1.1–1.4), unchanged.
 
-## Jak to rozmawia z ploterami
+## How it talks to the plotters
 
-Plotery Canon odpowiadają na jeden z dwóch protokołów:
+Canon plotters answer one of two protocols:
 
-- **CHMP (TCP, port 80)**: nowsze plotery. Skrypt wysyła zapytanie POST (GetCapability/device i GetStatus/counter), a potem odbiera odpowiedź przez GET.
-- **CPCA (UDP, port 47545)**: starsze iPF. Skrypt otwiera sesję, pyta o model i pobiera tekstowy raport stanu. Na pewno działa z **iPF785**. Pozostałe modele iPF w wersji NAS są eksperymentalne.
+- **CHMP (TCP, port 80)**: newer plotters. The script sends a POST request (GetCapability/device and GetStatus/counter), then picks up the response with a GET.
+- **CPCA (UDP, port 47545)**: older iPF models. The script opens a session, asks for the model and downloads a text status report. Confirmed working with the **iPF785**. Other iPF models are experimental in the NAS version.
 
-Obie wersje próbują różnych wersji CHMP, ale nie w identyczny sposób:
+Both versions try several CHMP versions, but not in exactly the same way:
 
-- NAS próbuje kolejno 1.3.0, 1.0.0 i 1.4.0.
-- Komputer w trybie auto próbuje 1.3.0 i 1.0.0.
+- NAS tries 1.3.0, 1.0.0 and 1.4.0, in that order.
+- Desktop in auto mode tries 1.3.0 and 1.0.0.
 
-### Co zostało sprawdzone w praktyce
+### What has been tested in practice
 
-12.11.2026 zrobiłem pilotaż na NAS-ie Synology **DS223j** (Realtek RTD1619B, 1 GB RAM, DSM **7.4.1-90080 Update 1**, Container Manager **24.0.2-1706**). Wynik pełnego skanu sieci /24:
+On 12 Nov 2026 I ran a pilot on a Synology **DS223j** NAS (Realtek RTD1619B, 1 GB RAM, DSM **7.4.1-90080 Update 1**, Container Manager **24.0.2-1706**). Result of a full /24 network scan:
 
-- sprawdzone 254 adresy;
-- dwa udane odczyty przez CHMP: **TX-3000** i **TM-610M**;
-- zero odczytów częściowych;
-- w raporcie TX-3000 identyfikacja i liczniki miały status OK.
+- 254 addresses checked;
+- two successful reads over CHMP: **TX-3000** and **TM-610M**;
+- zero partial reads;
+- the TX-3000 report had OK status for both identification and counters.
 
-Uczciwie trzeba dodać, że to nie dowodzi obsługi wszystkich modeli. CPCA na NAS-ie też nie zostało jeszcze sprawdzone.
+To be fair, this doesn't prove that every model is supported. CPCA on the NAS hasn't been tested yet either.
 
-## Jak czytać wyniki
+## How to read the results
 
-Kilka rzeczy, na które łatwo się nabrać:
+A few things that are easy to get wrong:
 
-- **Ekwiwalent A4 i powierzchnia A4** to dwa osobne pola, ale druga wartość to tylko przeliczenie pierwszej (A4 × 0,06237 m²). Nie traktuj jej jak niezależnego licznika powierzchni.
-- **Jednostki `amount` i `area_square`** mogą być surowe, tak jak podał je ploter. Nie zakładaj z góry, że to ml albo m². Jeśli w kodzie jest jakieś przeliczenie dla danego modelu, porównaj je z raportem wydrukowanym przez sam ploter.
-- **Brak odpowiedzi albo brak pola to nie zero.** Oznacza tylko, że nie udało się tego odczytać.
-- **Skan nie znajdzie wszystkiego.** Wykrywa urządzenia, które odpowiadają na CHMP lub CPCA. Ploter uśpiony, wyłączony albo schowany za zaporą lub w innym VLAN-ie może się nie pokazać.
+- **A4 equivalent and A4 area** are two separate fields, but the second one is just a conversion of the first (A4 × 0.06237 m²). Don't treat it as an independent area counter.
+- **The `amount` and `area_square` units** may be raw, exactly as the plotter reported them. Don't assume they're ml or m². If the code has a model-specific conversion, compare it against the report printed by the plotter itself.
+- **No response or a missing field is not zero.** It only means the value couldn't be read.
+- **A scan won't find everything.** It detects devices that answer CHMP or CPCA. A plotter that's asleep, switched off, or hidden behind a firewall or in another VLAN may not show up.
 
-Jeśli liczniki mają posłużyć do rozliczeń, najpierw porównaj model, numer seryjny, liczniki i jednostki z tym, co pokazuje urządzenie. Nie ma tu automatycznego importu do Princity.
+If the counters will be used for billing, first compare the model, serial number, counters and units with what the machine itself shows. There is no automatic import into Princity.
 
-## Prywatność
+## Privacy
 
-Raporty i logi zawierają numery seryjne, adresy IP i dane o eksploatacji. **Nie wrzucaj ich na GitHuba**, haseł tym bardziej.
+Reports and logs contain serial numbers, IP addresses and usage data. **Don't upload them to GitHub**, and certainly not passwords.
 
-Wszystkie przykłady używają „dokumentacyjnej” sieci 192.0.2.0/24, która nie istnieje naprawdę. Podstaw swój zakres adresów, na skanowanie którego masz zgodę.
+All examples use the "documentation" network 192.0.2.0/24, which doesn't really exist. Replace it with your own address range, one you're allowed to scan.
 
-Wersja NAS w repozytorium różni się od tej z pilotażu tylko konfiguracją poczty. Adresy e-mail są teraz brane ze zmiennych środowiskowych, a wysyłka jest opcjonalna.
+The only difference between the NAS version in this repository and the pilot version is the mail configuration. Email addresses now come from environment variables, and sending mail is optional.
 
-Wdrożenie na NAS-ie nie aktualizuje DSM, nie instaluje systemowego Pythona i nie wymaga kontenera z podwyższonymi uprawnieniami.
+Deploying on the NAS doesn't update DSM, doesn't install a system Python and doesn't need a privileged container.
 
-## Szybki test na własnym komputerze
+## Quick test on your own computer
 
 ```sh
 python -B -m unittest discover -s tests -v
@@ -73,4 +73,4 @@ python -B desktop/Canon_plotery.py --help
 python -B nas/app/canon_collector.py --help
 ```
 
-Testy działają na spreparowanych odpowiedziach, więc nie łączą się z siecią ani z serwerem pocztowym. Sprawdzają kod, ale nie zastąpią próby na prawdziwych ploterach. Szczegóły instalacji i utrzymania są w README każdej z wersji.
+The tests run on synthetic responses, so they don't touch the network or a mail server. They check the code, but they're no substitute for a trial on real plotters. Installation and maintenance details are in each version's README.
