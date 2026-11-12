@@ -1,11 +1,27 @@
-# Kolektor na komputer
+# Wersja na komputer
 
-## Instalacja i pliki
+Ta wersja nadaje się do szybkiego odczytu na bieżąco: odpalasz, wybierasz ploter z listy i po chwili masz raport. Najlepiej działa na Windows.
 
-Zainstaluj Python 3.10+; na Windows potrzebny jest launcher `py`, a do automatycznego wykrywania sieci Windows PowerShell. Skopiuj `Canon_plotery.py` i `Canon_plotery.cmd` do jednego zapisywalnego katalogu. Brak zależności pip. `.cmd` uruchamia Pythona, przekazuje parametry i czeka na naciśnięcie klawisza po zakończeniu; do harmonogramu używaj bezpośrednio Pythona.
-Windows jest środowiskiem interaktywnego wykrywania. Na Linuxie używaj jawnego `--ip` lub `--subnet`; automatyczne wykrywanie tej wersji wywołuje PowerShell.
+## Czego potrzebujesz
 
-## Uruchamianie
+- **Python 3.10 lub nowszy.** Na Windows musi być dostępne polecenie `py`, które instaluje się razem z Pythonem.
+- **Windows PowerShell**, jeśli chcesz, żeby skrypt sam wykrył Twoją sieć.
+- Dwa pliki, `Canon_plotery.py` i `Canon_plotery.cmd`, w jednym katalogu, w którym masz prawo zapisu. Nic więcej nie trzeba instalować.
+
+Plik `.cmd` to wygodny skrót. Uruchamia Pythona, przekazuje mu parametry i na końcu czeka na naciśnięcie klawisza, żeby okno nie zamknęło się samo. Jeśli chcesz wpiąć odczyt w harmonogram zadań, wywołuj bezpośrednio Pythona, bez `.cmd`.
+
+**Linux:** działa, ale automatyczne wykrywanie sieci korzysta z PowerShella. Dlatego na Linuksie zawsze podawaj `--ip` albo `--subnet`.
+
+## Jak uruchomić
+
+Najprościej kliknij dwukrotnie `Canon_plotery.cmd`. Skrypt sam poszuka ploterów i pokaże listę. Wtedy możesz wpisać:
+
+- numery ploterów, oddzielone przecinkami;
+- `A`, żeby odczytać wszystkie;
+- `R`, żeby wpisać adres ręcznie;
+- `Q`, żeby zakończyć.
+
+Jeśli znasz adres plotera, możesz pominąć wyszukiwanie:
 
 ```bat
 Canon_plotery.cmd
@@ -16,33 +32,50 @@ py -3 Canon_plotery.py --subnet 192.0.2.0/24 --scan-only
 py -3 Canon_plotery.py --ip 192.0.2.20 --protocol cpca
 ```
 
-Na Linuxie zamień `py -3` na `python3`. Jawne IP pomija wyszukiwanie i wybór. Bez `--ip` program wyszukuje urządzenia, po czym pyta o wybór: numery oddzielone przecinkami, A (wszystkie), R (ręczny adres), Q (koniec). `--scan-only` kończy po odkryciu, bez raportów odczytu.
+Na Linuksie zamiast `py -3` wpisz `python3`. Opcja `--scan-only` tylko pokazuje, co jest w sieci, bez odczytu liczników.
 
-## Parametry
+## Wszystkie opcje
 
-| Parametr | Znaczenie / domyślnie |
+| Opcja | Co robi (wartość domyślna) |
 | --- | --- |
-| `--ip IP [IP ...]` | Jeden lub kilka IPv4; nie łączyć z `--subnet` |
-| `--subnet CIDR` | Jedna podsieć IPv4, najwyżej 1024 adresy |
-| `--scan-only` | Tylko wykrywanie; nie łączyć z `--ip` |
-| `--protocol auto/chmp/cpca` | auto: CHMP, potem CPCA |
-| `--version auto/1.3.0/1.0.0` | Wersja żądania CHMP; auto próbuje obie |
-| `--chmp-port` / `--cpca-port` | 80 TCP / 47545 UDP |
-| `--timeout` | 10 sekund; dozwolone >0 do 120 |
-| `--retries` | Dodatkowe próby UDP: 2, zakres 0–10 |
-| `--encoding` | Tekst CPCA: cp1250 |
-| `--output` | Domyślnie `raporty_Canon` obok skryptu |
+| `--ip IP [IP ...]` | Jeden lub kilka adresów IPv4. Nie łącz z `--subnet` |
+| `--subnet CIDR` | Jedna podsieć IPv4, maksymalnie 1024 adresy |
+| `--scan-only` | Samo wyszukiwanie, bez odczytu. Nie łącz z `--ip` |
+| `--protocol auto/chmp/cpca` | `auto` najpierw próbuje CHMP, potem CPCA |
+| `--version auto/1.3.0/1.0.0` | Wersja zapytania CHMP. `auto` próbuje obu |
+| `--chmp-port` / `--cpca-port` | 80 (TCP) / 47545 (UDP) |
+| `--timeout` | Ile sekund czekać na odpowiedź: 10, dozwolone od powyżej 0 do 120 |
+| `--retries` | Ile razy ponowić zapytanie UDP: 2, zakres 0–10 |
+| `--encoding` | Kodowanie tekstu z CPCA: cp1250 |
+| `--output` | Gdzie zapisać raporty, domyślnie `raporty_Canon` obok skryptu |
 
-W tej wersji CPCA jest ograniczone do iPF785. Wersja komputerowa nie ma wszystkich rozszerzeń kolektora NAS (np. CHMP 1.4.0 i eksperymentalnej listy iPF).
+Ta wersja obsługuje przez CPCA tylko **iPF785**. Nie ma też niektórych nowości z wersji NAS, na przykład CHMP 1.4.0 i eksperymentalnej obsługi innych iPF.
 
-## Raporty i błędy
+## Co dostajesz
 
-Raport TXT i HTML zawiera odczytane pola, log zapisuje komunikację; CPCA zachowuje surowy BIN. Nazwy uwzględniają czas i urządzenie. Przy błędzie może powstać osobny plik błędu. Sprawdź pliki, a nie tylko obecność katalogu.
-Kod wyjścia: 0 — brak błędów (również rezygnacja z wyboru), 1 — błąd odczytu/wykonania, 2 — błąd argumentów, 130 — przerwanie/anulowanie wejścia. `--scan-only` z brakiem urządzeń może zakończyć się kodem 0.
-Ta wersja nie wysyła e-maili. Do zbiorczych raportów i nieinteraktywnego skanu użyj wersji NAS.
+Dla każdego plotera powstaje:
 
-## Weryfikacja i diagnostyka
+- raport **TXT** i **HTML** z odczytanymi wartościami;
+- **log** z całą komunikacją;
+- przy CPCA dodatkowo surowa odpowiedź **BIN**.
 
-Zacznij od jednego IP i `--protocol chmp`, porównaj wynik z panelem plotera, dopiero potem skanuj sieć. Brak CHMP nie dowodzi awarii: model może używać CPCA albo odczyt może blokować zapora. Nie wymagaj otwartego TCP 80 od urządzenia obsługiwanego tylko przez UDP.
-Wyników nie przeliczaj automatycznie na ml/m²; zasady interpretacji opisuje główny README.
-Przed aktualizacją zachowaj poprzednie skrypty i raporty. Wycofanie polega na przywróceniu tych plików.
+Nazwy plików zawierają datę, godzinę i urządzenie. Jeśli coś pójdzie nie tak, może powstać osobny plik z opisem błędu. Dlatego otwórz pliki i sprawdź ich treść, bo sam katalog z raportami jeszcze nie znaczy, że odczyt się udał.
+
+Kody wyjścia przydają się, jeśli uruchamiasz skrypt z innego programu:
+
+- `0`: bez błędów. Ten kod jest też wtedy, gdy zrezygnowałeś z wyboru albo `--scan-only` niczego nie znalazł.
+- `1`: błąd odczytu lub wykonania.
+- `2`: złe parametry.
+- `130`: przerwane przez użytkownika.
+
+Ta wersja nie wysyła maili. Jeśli potrzebujesz zbiorczego raportu albo skanu bez Twojego udziału, użyj [wersji NAS](../nas/README.md).
+
+## Gdy coś nie działa
+
+**Zacznij od jednego plotera.** Uruchom `--ip <adres> --protocol chmp` i porównaj wynik z tym, co widać na panelu urządzenia. Dopiero kiedy to się zgadza, skanuj całą sieć.
+
+Jeśli CHMP nie odpowiada, to jeszcze nie znaczy, że coś jest zepsute. Ploter może używać CPCA (UDP) albo ruch może blokować zapora. Ploter obsługiwany tylko przez UDP nie musi mieć otwartego portu 80.
+
+Nie przeliczaj wyników automatycznie na ml czy m². Dlaczego, wyjaśnia [główny README](../README.md#jak-czytać-wyniki).
+
+**Aktualizacja:** zanim podmienisz skrypty, zachowaj stare wersje i dotychczasowe raporty. Jeśli nowa wersja sprawi kłopot, po prostu przywróć stare pliki.
