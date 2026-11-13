@@ -1,100 +1,143 @@
-# Kolektor NAS / Linux / Synology
+# NAS version (Synology / Linux)
 
-## Sposób pracy
+This version is for unattended work. The NAS scans the network once, collects counters from every plotter it finds, saves a full set of reports into a dated folder and exits. **It is not a server that runs all the time.** Each run is one scan.
 
-`app/canon_collector.py` wykonuje jeden skan, zapisuje datowany zestaw raportów i kończy proces. Nie jest stale działającym serwerem. `canon_protocols.py` dostarcza protokoły, a `canon_mailer.py` generuje TXT i opcjonalnie wysyła e-mail. Wszystkie trzy pliki muszą być razem, także bez SMTP.
-Python 3.10+, tylko biblioteki standardowe. Uruchomienie bez kontenera jest możliwe z jawnym CIDR. Nie zastępuj Pythona DSM.
+## What it's made of
 
-## Przygotowanie Synology
+The `app/` folder has three files. They must sit together, even if you don't use email:
 
-1. Potwierdź model, wersję DSM, RAM, dostępność i wersję Container Manager. Nie zakładaj dostępności po samej nazwie modelu.
-2. Wyeksportuj konfigurację DSM i zachowaj poza NAS; to nie jest kopia danych. Sprawdź kopię ważnych danych i zachowaj poprzednią instalację kolektora.
-3. Odczytaj IP i maskę interfejsu LAN NAS. Nie zakładaj /24 i nie skanuj sieci mostka kontenera.
-4. Ustal folder udziału i jego rzeczywistą ścieżkę. Utwórz `CanonCollector/apps` na kod oraz `CanonCollector/reports` na wyniki. Zastosuj ograniczone ACL, nie chmod 777.
-5. Prześlij trzy pliki z `app/` repozytorium do `apps` na NAS.
+- `canon_collector.py` is the main program; it scans and saves the results;
+- `canon_protocols.py` handles talking to the plotters over CHMP and CPCA;
+- `canon_mailer.py` builds the TXT report and, if you want, sends it by email.
 
-Pilotaż użytkownika wykorzystywał udział `/volume1/WF_Serwis/CanonCollector`, ale poniższe ścieżki i adresy to przykłady. Nie instaluj ani nie aktualizuj pakietów DSM bez decyzji administratora.
+Python 3.10+ with the standard library is enough. A container isn't required; you can run the script directly, but then you must give the subnet (CIDR). **Don't replace the Python that ships with DSM.**
 
-## Kontener w interfejsie DSM
+## Preparing the Synology, step by step
 
-Użyj oficjalnego obrazu `python`. W pilotażu użyto już pobranego `python:latest`; zmienna obrazu deklarowała 3.15.2, nie wykonano osobnego pomiaru `python --version`. Tag latest jest zmienny. Dla powtarzalnego wdrożenia zapisz rzeczywistą wersję i identyfikator/digest przetestowanego obrazu; nie aktualizuj automatycznie. Nowy obraz musi obsługiwać architekturę NAS.
+1. **Check what you have.** NAS model, DSM version, amount of RAM, whether Container Manager is available and which version. Don't guess this from the model name alone.
+2. **Make a backup.** Export the DSM configuration and store it off the NAS. That's a backup of settings, not data, so also make sure important data has a current backup. If the collector was already installed, keep the previous version.
+3. **Check the LAN network address.** Read the IP and netmask of the NAS's LAN interface. Don't assume it's /24. Also don't scan the internal container network (bridge), because the plotters are on the LAN.
+4. **Prepare the folders.** In the chosen shared folder create `CanonCollector/apps` for the code and `CanonCollector/reports` for the results. Grant permissions (ACL) only to those who need them. No `chmod 777`.
+5. **Upload the files.** Copy the three files from `app/` into `apps` on the NAS.
 
-| Ustawienie | Wartość |
+In my pilot the shared folder was `/volume1/WF_Serwis/CanonCollector`. The paths and addresses below are only examples. Don't install or update DSM packages without the administrator's approval.
+
+## Creating the container in DSM
+
+Use the official `python` image. In the pilot it was a previously downloaded `python:latest`. According to the image variable it was version 3.15.2, but I didn't check this separately with `python --version`.
+
+Note: `latest` changes over time. If you want a reproducible deployment, write down the exact version and identifier (digest) of the image you tested, and don't update it automatically. A new image must also support your NAS's CPU architecture.
+
+| Setting | Value |
 | --- | --- |
-| Sieć | bridge, jawna podsieć LAN jako parametr |
-| Porty publikowane | Brak — tylko połączenia wychodzące |
-| Folder kodu | `/volume1/UDZIAL/CanonCollector/apps` → `/app`, tylko odczyt |
-| Folder raportów | `/volume1/UDZIAL/CanonCollector/reports` → `/reports`, odczyt/zapis |
-| Wysokie uprawnienia / privileged | Wyłączone |
-| Automatyczny restart | Wyłączony — zadanie jednorazowe |
+| Network | bridge. You pass the LAN subnet as a parameter |
+| Published ports | None. The container only makes outgoing connections |
+| Code folder | `/volume1/SHARE/CanonCollector/apps` → `/app`, read-only |
+| Reports folder | `/volume1/SHARE/CanonCollector/reports` → `/reports`, read/write |
+| High privileges (privileged) | Off |
+| Auto-restart | Off, because it's a one-off job |
 
-Brak privileged nie oznacza automatycznie użytkownika bez root wewnątrz kontenera. Do produkcji ustal UID/GID konta kolektora i ACL folderu; sprawdź zapis raportów pod tym kontem. Pilotaż UI nie potwierdził nieuprzywilejowanego UID. Nie montuj docker.sock, katalogów systemowych ani całego udziału.
+Having "privileged" turned off doesn't by itself mean the container isn't running as root inside. For production, decide the UID/GID of the account the collector should run as, set the folder ACL for it and check that reports get written. In the pilot I didn't confirm, through the GUI, that it ran under an unprivileged UID. Don't mount `docker.sock`, system folders or the whole shared folder.
 
-Pierwszy test jednego plotera, wyłącznie CHMP:
+**First try: one plotter, CHMP only**
 
 ```text
 python3 -B -u /app/canon_collector.py --chmp-only --subnet 192.0.2.10/32 --output /reports --workers 1 --timeout 5
 ```
 
-Pełny skan CHMP i CPCA:
+**Once that works: full scan, CHMP and CPCA**
 
 ```text
 python3 -B -u /app/canon_collector.py --subnet 192.0.2.0/24 --output /reports --workers 4 --timeout 3 --retries 1
 ```
 
-Podmień dokumentacyjne adresy na własny zakres. CPCA domyślnie dopuszcza rodzinę iPF: poza iPF785 to obsługa eksperymentalna. Aby ją ograniczyć, dodaj `--cpca-model iPF785` (można powtórzyć opcję dla uzgodnionej listy). `--chmp-only` całkowicie omija inicjalizację CPCA, również po błędach CHMP.
-Zapora/trasy muszą umożliwiać ruch wychodzący TCP 80 i UDP 47545 do ploterów oraz odpowiedzi. Nie trzeba wystawiać portów NAS do Internetu. Nie zmieniaj zapory w ciemno.
+Replace the example addresses with your own.
 
-## Opcjonalny projekt Compose
+A few words about CPCA:
 
-`compose.yaml` jest szablonem alternatywnym do kreatora GUI. Przed użyciem uzupełnij obraz i ścieżki. Nie wdrażaj równocześnie kontenera GUI i projektu dla tego samego skanu.
-Szablon ogranicza capabilities, blokuje eskalację i zapis do systemu plików kontenera, a `/reports` pozostaje zapisywalny. To dodatkowy wariant konfiguracji, nie odtworzony i przetestowany eksport pilotażu DSM.
+- By default the script tries CPCA with the whole iPF family, but anything other than the iPF785 is experimental.
+- To stick to the tested model, add `--cpca-model iPF785`. You can repeat the option to list several models.
+- `--chmp-only` turns CPCA off completely, even when CHMP fails.
 
-## Parametry CLI
+The firewall and routing must allow outgoing traffic from the NAS to the plotters (TCP 80 and UDP 47545) and the replies. Nothing needs to be opened from the Internet side. Don't change firewall settings blindly.
 
-| Opcja | Domyślnie / zachowanie |
+## Alternative: Compose
+
+`compose.yaml` is a template for those who prefer configuring from a file rather than the DSM wizard. Fill in the image and paths before using it. Don't run the wizard-created container and the Compose project for the same scan at the same time.
+
+The template also hardens the container: it drops unneeded capabilities, blocks privilege escalation and makes the container's filesystem read-only. Only `/reports` stays writable. It's an extra option, not a recreated and tested copy of the pilot setup.
+
+## All options
+
+| Option | What it does (default) |
 | --- | --- |
-| `--subnet CIDR` | Można powtarzać; IPv4, każda podsieć do 1024 adresów; adresy deduplikowane |
-| `--output PATH` | `~/canon-collector-data`; w kontenerze ustaw `/reports` |
-| `--workers` | 4; zakres 1–24 |
-| `--timeout` | 5 sekund na operację, >0 do 120 |
-| `--retries` | 2 dodatkowe próby CPCA, zakres 0–10 |
-| `--chmp-only` | Wyłącza CPCA; domyślnie nieaktywne |
-| `--cpca-model MODEL` | Powtarzalna lista; domyślnie wszystkie iPF, eksperymentalne poza iPF785 |
-| `--email` | Wysyłka raportu po skanie; domyślnie wyłączona |
+| `--subnet CIDR` | Subnet to scan. Can be given several times, each up to 1024 addresses; duplicate addresses are skipped |
+| `--output PATH` | Where to save results: `~/canon-collector-data`. In the container set `/reports` |
+| `--workers` | How many addresses to check at once: 4, range 1–24 |
+| `--timeout` | How many seconds to wait for a reply: 5, allowed from above 0 up to 120 |
+| `--retries` | How many times to retry a CPCA request: 2, range 0–10 |
+| `--chmp-only` | Turns CPCA off. Inactive by default |
+| `--cpca-model MODEL` | Which models to try over CPCA. By default all iPF, experimental except the iPF785 |
+| `--email` | Emails the report after the scan. Off by default |
 
-Bez `--subnet` program używa `ip -j -4 addr show up`. DSM może nie obsługiwać `-j`, a kontener wykryje sieć mostka, nie LAN. Dlatego w DSM zawsze stosuj jawny CIDR.
-Linuxowy odczyt `ip -4 addr show` dostarcza adres/prefiks; PowerShell `Get-NetIPConfiguration` nie jest tu używany. Adres/prefiks można przeliczyć przez `ipaddress.ip_interface('ADRES/PREFIKS').network`. Dostęp do innych VLAN wymaga osobnego potwierdzenia tras i jawnych zakresów.
+**Always give `--subnet` on Synology.** Without it the script tries to detect the network itself with `ip -j -4 addr show up`, but:
 
-## Wyniki i ręczne uruchomienie
+- DSM may not support the `-j` switch;
+- inside the container the script will see the internal container network, not your LAN.
 
-`Container Manager → Kontener → nazwa → Uruchom` wykonuje kolejny skan. Nie uruchamiaj równocześnie kopii kontenera.
-Każdy skan tworzy `YYYYMMDDTHHMMSS_mikrosekundyZ/` w UTC:
+How do you find the subnet? `ip -4 addr show` gives the address with its prefix (e.g. `192.0.2.5/24`). You can compute the subnet from it in Python: `ipaddress.ip_interface('ADDRESS/PREFIX').network`. PowerShell's `Get-NetIPConfiguration` isn't used here. If plotters are in other VLANs, first make sure the NAS has a route to them, and list their ranges explicitly.
+
+## Running it and the results
+
+Start the next scan in **Container Manager → Container → (name) → Start**. Don't run two copies at the same time.
+
+Each scan creates a new folder named with the UTC date and time, in the format `YYYYMMDDTHHMMSS_microsecondsZ/`:
 
 ```text
-manifest.json
-Canon_<czas>.txt
-<IP>/result.json
-<IP>/communication.log
-<IP>/device_<wersja>.xml       # CHMP
-<IP>/counter_<wersja>.xml      # CHMP
-<IP>/status.bin               # CPCA
-<IP>/status.txt               # CPCA
+manifest.json                  # summary of the whole scan
+Canon_<time>.txt               # combined, human-readable report
+<IP>/result.json               # result for a single plotter
+<IP>/communication.log         # communication log
+<IP>/device_<version>.xml      # CHMP
+<IP>/counter_<version>.xml     # CHMP
+<IP>/status.bin                # CPCA
+<IP>/status.txt                # CPCA
 ```
 
-Pliki zależą od protokołu i powodzenia operacji. Adresy niepotwierdzone pozostają w manifeście bez osobnych katalogów. Surowe odpowiedzi potwierdzonych urządzeń są zachowywane. Raport zbiorczy może mieć sekcje z częściowymi danymi; sprawdzaj statusy i błędy.
-Kod 0: co najmniej jeden udany odczyt i brak częściowych. Nie oznacza znalezienia wszystkich urządzeń. Kod 1: częściowe wyniki, brak udanych odczytów lub błąd raportu/SMTP. Kod 2: argumenty. Nieobsłużony wyjątek również może przerwać program; zachowaj dziennik.
-W pilotażu /24 trwało około 13 minut — oczekiwanie na nieaktywne IP dominuje nad odczytami. To obserwacja, nie limit czasu. Sprawdź `Checked 254/254`, podsumowanie i zapis TXT.
+Not every plotter gets every file; it depends on the protocol and on what could be read. Addresses where no plotter was confirmed appear only in the manifest and get no folder of their own. Raw responses are kept for devices that were found. The combined report may contain partial data, so look at the statuses and errors, not just the numbers.
 
-## Harmonogram i powiadomienia
+Exit codes:
 
-Repozytorium nie włącza harmonogramu. W opisanym pilotażu uruchomienia były ręczne. Automatyzację konfiguruj dopiero po ustaleniu godziny, konta wykonania i sposobu uruchomienia kontenera. Harmonogram DSM wymaga pełnych ścieżek i ochrony przed równoległym skanem; nie włączaj automatycznego restartu jako zamiennika harmonogramu. Ustal retencję, bo raporty nie są automatycznie usuwane.
-Zatrzymanie po skanie jest oczekiwane. DSM może wysłać alert „Nieoczekiwane zatrzymanie kontenera” mimo kompletnego raportu; najpierw sprawdź dziennik i kod wyjścia.
-Jeśli świadomie wyciszasz to zdarzenie: utwórz własną regułę z wszystkimi zdarzeniami oprócz tego jednego i przypisz ją do profilu odbiorców e-mail zamiast niemodyfikowalnej All. Obejmuje to również rzeczywiste awarie innych kontenerów. Osobny kanał konta Synology/push może nadal wysyłać alerty. Nie wyłączaj wszystkich powiadomień NAS.
+- `0`: at least one successful read and no partial ones. Note: this doesn't mean every plotter was found.
+- `1`: there were partial results, nothing succeeded, or the report or email sending failed.
+- `2`: invalid parameters.
 
-## Opcjonalna poczta SMTP
+An unhandled exception can also stop the program, so keep the logs.
 
-Domyślnie raporty pozostają na NAS. Przed `--email` ustaw:
+**How long does it take?** In the pilot a /24 scan took about 13 minutes. Most of the time is spent waiting for empty addresses to time out; reading the plotters themselves is quick. That's an observation, not a limit. At the end, check the log for `Checked 254/254`, the summary, and that the TXT file was written.
+
+## Scheduling and notifications
+
+The repository **doesn't turn on any schedule**. In the pilot I ran the scans by hand. Only set up automation once you know what time it should run, under which account, and how the container will be started. In DSM Task Scheduler:
+
+- use full paths;
+- make sure two scans can't run at once;
+- don't use the container's auto-restart as a substitute for a schedule.
+
+Also think about cleanup, because old reports aren't deleted automatically.
+
+**The "Container stopped unexpectedly" alert.** The container stops after the scan, and that's intended. DSM may still report it as a problem even though the report is complete. Before you worry, check the log and the exit code.
+
+If you deliberately want to silence this alert, create your own notification rule that covers all events **except this one**, and assign it to the email recipient profile instead of the built-in "All" rule, which can't be edited. Keep two things in mind:
+
+- this will also silence real failures of other containers;
+- push notifications through your Synology account may still come through.
+
+Don't turn off all NAS notifications.
+
+## Emailing the report (optional)
+
+By default reports stay on the NAS. If you want to receive them by email, set these before using `--email`:
 
 ```text
 CANON_SMTP_SENDER=collector@example.com
@@ -103,9 +146,26 @@ CANON_SMTP_HOST=smtp.example.com
 CANON_SMTP_PASSWORD_FILE=/run/secrets/canon-smtp-password
 ```
 
-SMTP_SSL używa portu 465 i weryfikacji certyfikatu. Nie wyłączaj jej. Hasło trzymaj w osobnym pliku poza repozytorium i udziałem raportów, z prawami 600/odpowiednim ACL; montuj tylko ten plik jako read-only. Nie wpisuj hasła w polecenie, obraz ani Compose. Bez zmiennej ścieżki moduł szuka `~/.canon-smtp-password`, więc HOME konta musi być właściwe.
-Kod wysyła z konta nadawcy do jednego ustawionego adresata. Weryfikacja wysyłki nie była częścią pilotażu NAS. Najpierw obejrzyj wygenerowany TXT, potwierdź adresata i dopiero wykonaj uzgodniony test. Ustawienia powiadomień DSM są niezależne od SMTP kolektora.
+The connection uses SMTP_SSL on port 465 and verifies the server certificate. Don't turn that verification off.
 
-## Aktualizacja i wycofanie
+**Password:**
 
-Zatrzymaj skany, zachowaj poprzednie trzy pliki, konfigurację kontenera i identyfikator obrazu. Podmień moduły jako komplet i przetestuj jeden IP. W razie błędu przywróć pliki/konfigurację; nie przywracaj całego DSM. Zachowaj raporty, nie usuwaj obrazu używanego przez inne aplikacje. Publikacja na GitHubie nie aktualizuje plików na NAS.
+- keep it in a separate file, outside the repository and outside the reports folder;
+- set permissions to 600 or an appropriate ACL;
+- mount only that one file into the container, read-only;
+- never put the password in a command, an image or `compose.yaml`.
+
+If you don't set `CANON_SMTP_PASSWORD_FILE`, the script looks for the password in `~/.canon-smtp-password`, so the account's home folder (HOME) must be set correctly.
+
+Mail goes from the sender account to **one** recipient. I didn't test sending email in the NAS pilot. So first look over the generated TXT, make sure the recipient is right, and only then do a test send. DSM notifications are a separate matter, unrelated to the collector's email.
+
+## Updating and rolling back
+
+1. Make sure no scan is running.
+2. Keep the current three files, the container configuration and the image identifier.
+3. Replace all three modules at once, not one by one.
+4. Test on a single IP address.
+
+If something doesn't work, put the old files and configuration back. You don't need to restore all of DSM for that. Don't delete reports, and don't remove the image if other applications use it.
+
+Remember that a new version on GitHub doesn't reach the NAS by itself. The files have to be replaced by hand.
